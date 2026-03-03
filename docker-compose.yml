@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -17,6 +15,48 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - marketplace-network
+
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: marketplace-flyway
+    platform: linux/amd64
+    command: -configFiles=/flyway/conf/flyway.conf -locations=filesystem:/flyway/sql migrate
+    volumes:
+      - ./db/migration:/flyway/sql
+      - ./flyway.docker.conf:/flyway/conf/flyway.conf
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - marketplace-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marketplace-api
+    environment:
+      DATABASE_URL: postgresql://marketplace:marketplace123@postgres:5432/marketplace
+      FLASK_ENV: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./openapi:/app/openapi
+    depends_on:
+      postgres:
+        condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
+    networks:
+      - marketplace-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+
+networks:
+  marketplace-network:
+    driver: bridge
