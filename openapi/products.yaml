@@ -1,0 +1,839 @@
+openapi: 3.0.3
+
+info:
+  title: Marketplace API
+  description: Marketplace API with orders, items and users management
+  version: first
+
+servers:
+  - url: http://localhost:8000
+    description: local server
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      operationId: registerUser
+      tags:
+        - auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 100
+                role:
+                  type: string
+                  enum: [USER, SELLER, ADMIN]
+                  default: USER
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      summary: Login and get access tokens
+      operationId: loginUser
+      tags:
+        - auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      operationId: refreshToken
+      tags:
+        - auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /products:
+    post:
+      summary: Create a new product (SELLER, ADMIN only)
+      operationId: createProduct
+      tags:
+        - products
+      security:
+        - bearerAuth: []
+      description: |
+        Create a new product.
+        - SELLER: Can create products (seller_id is automatically set)
+        - ADMIN: Can create products for any seller
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    get:
+      summary: Get list of products with filtering (public)
+      operationId: getProducts
+      tags:
+        - products
+      description: Public endpoint - no authentication required
+      parameters:
+        - name: page
+          in: query
+          description: Page number (from 0)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          description: Page size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by product status
+          required: false
+          schema:
+            $ref: '#/components/schemas/ProductStatus'
+        - name: category
+          in: query
+          description: Filter by category (exact match)
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+
+  /products/{id}:
+    get:
+      summary: Get product by ID (public)
+      operationId: getProductById
+      tags:
+        - products
+      description: Public endpoint - no authentication required
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    put:
+      summary: Update product (SELLER own products, ADMIN any)
+      operationId: updateProduct
+      tags:
+        - products
+      security:
+        - bearerAuth: []
+      description: |
+        Update a product.
+        - SELLER: Can only update their own products
+        - ADMIN: Can update any product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdate'
+      responses:
+        '200':
+          description: Product updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    delete:
+      summary: Delete (archive) product (SELLER own products, ADMIN any)
+      operationId: deleteProduct
+      tags:
+        - products
+      security:
+        - bearerAuth: []
+      description: |
+        Soft delete a product (set status to ARCHIVED).
+        - SELLER: Can only delete their own products
+        - ADMIN: Can delete any product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Product archived successfully
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /orders:
+    post:
+      summary: Create a new order (USER, ADMIN only)
+      operationId: createOrder
+      tags:
+        - orders
+      security:
+        - bearerAuth: []
+      description: |
+        Create a new order.
+        - USER: Can create orders for themselves
+        - ADMIN: Can create orders
+        - SELLER: Cannot create orders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreate'
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Business logic error (inactive product, insufficient stock, active order exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Promo code error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}:
+    get:
+      summary: Get order by ID (USER own orders, ADMIN any)
+      operationId: getOrderById
+      tags:
+        - orders
+      security:
+        - bearerAuth: []
+      description: |
+        Get order details.
+        - USER: Can only view their own orders
+        - ADMIN: Can view any order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    put:
+      summary: Update order (USER own orders, ADMIN any)
+      operationId: updateOrder
+      tags:
+        - orders
+      security:
+        - bearerAuth: []
+      description: |
+        Update an order (only in CREATED status).
+        - USER: Can only update their own orders
+        - ADMIN: Can update any order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderUpdate'
+      responses:
+        '200':
+          description: Order updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Order ownership violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Business logic error (invalid state, insufficient stock)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Promo code error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /orders/{id}/cancel:
+    post:
+      summary: Cancel order (USER own orders, ADMIN any)
+      operationId: cancelOrder
+      tags:
+        - orders
+      security:
+        - bearerAuth: []
+      description: |
+        Cancel an order (only from CREATED or PAYMENT_PENDING status).
+        - USER: Can only cancel their own orders
+        - ADMIN: Can cancel any order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order canceled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '403':
+          description: Order ownership violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token for authentication
+  
+  schemas:
+    TokenResponse:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        refresh_token:
+          type: string
+          description: JWT refresh token
+        token_type:
+          type: string
+          default: bearer
+          description: Token type
+    
+    ProductStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+        - ARCHIVED
+      description: Product status
+    
+    ProductCreate:
+      type: object
+      required:
+        - name
+        - price
+        - stock
+        - category
+        - status
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Product name
+        description:
+          type: string
+          maxLength: 4000
+          nullable: true
+          description: Product description
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: Product price (must be > 0)
+        stock:
+          type: integer
+          minimum: 0
+          description: Stock quantity ( >= 0)
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Product category
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+    
+    ProductUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Product name
+        description:
+          type: string
+          maxLength: 4000
+          nullable: true
+          description: Product description
+        price:
+          type: number
+          format: decimal
+          minimum: 0.01
+          description: Product price (must be > 0)
+        stock:
+          type: integer
+          minimum: 0
+          description: Stock quantity ( >= 0)
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Product category
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+    
+    ProductResponse:
+      type: object
+      required:
+        - id
+        - name
+        - price
+        - stock
+        - category
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Product ID
+        name:
+          type: string
+          description: Product name
+        description:
+          type: string
+          nullable: true
+          description: Product description
+        price:
+          type: number
+          format: decimal
+          description: Product price
+        stock:
+          type: integer
+          description: Stock quantity
+        category:
+          type: string
+          description: Product category
+        status:
+          $ref: '#/components/schemas/ProductStatus'
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+    
+    ProductListResponse:
+      type: object
+      required:
+        - items
+        - total_elements
+        - page
+        - size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductResponse'
+        total_elements:
+          type: integer
+          description: Total number of products matching the filter
+        page:
+          type: integer
+          description: Current page number
+        size:
+          type: integer
+          description: Page size
+    
+    OrderStatus:
+      type: string
+      enum:
+        - CREATED
+        - PAYMENT_PENDING
+        - PAID
+        - SHIPPED
+        - COMPLETED
+        - CANCELED
+      description: Order status
+    
+    OrderItemCreate:
+      type: object
+      required:
+        - product_id
+        - quantity
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          description: Product ID
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 999
+          description: Quantity of product
+    
+    OrderCreate:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/OrderItemCreate'
+          description: Order items
+        promo_code:
+          type: string
+          pattern: '^[A-Z0-9_]{4,20}$'
+          nullable: true
+          description: Promo code (optional)
+    
+    OrderUpdate:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/OrderItemCreate'
+          description: New order items
+    
+    OrderItemResponse:
+      type: object
+      required:
+        - id
+        - product_id
+        - quantity
+        - price_at_order
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Order item ID
+        product_id:
+          type: string
+          format: uuid
+          description: Product ID
+        quantity:
+          type: integer
+          description: Quantity
+        price_at_order:
+          type: number
+          format: decimal
+          description: Price at time of order
+    
+    OrderResponse:
+      type: object
+      required:
+        - id
+        - user_id
+        - status
+        - total_amount
+        - discount_amount
+        - items
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Order ID
+        user_id:
+          type: string
+          format: uuid
+          description: User ID
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        promo_code:
+          type: string
+          nullable: true
+          description: Applied promo code
+        total_amount:
+          type: number
+          format: decimal
+          description: Total order amount
+        discount_amount:
+          type: number
+          format: decimal
+          description: Discount amount
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+          description: Order items
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+    
+    ErrorResponse:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+          description: Error code
+          enum:
+            - PRODUCT_NOT_FOUND
+            - PRODUCT_INACTIVE
+            - ORDER_NOT_FOUND
+            - ORDER_LIMIT_EXCEEDED
+            - ORDER_HAS_ACTIVE
+            - INVALID_STATE_TRANSITION
+            - INSUFFICIENT_STOCK
+            - PROMO_CODE_INVALID
+            - PROMO_CODE_MIN_AMOUNT
+            - ORDER_OWNERSHIP_VIOLATION
+            - VALIDATION_ERROR
+            - TOKEN_EXPIRED
+            - TOKEN_INVALID
+            - REFRESH_TOKEN_INVALID
+            - ACCESS_DENIED
+            - INVALID_CREDENTIALS
+            - USER_ALREADY_EXISTS
+        message:
+          type: string
+          description: Error message
+        details:
+          type: object
+          nullable: true
+          description: Additional error details
+          additionalProperties: true
+      example:
+        error_code: PRODUCT_NOT_FOUND
+        message: Product with id 123e4567-e89b-12d3-a456-426614174000 not found
+        details: null
