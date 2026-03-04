@@ -252,7 +252,6 @@ def get_product(product_id):
 
 # Get all products (with filtration and pagination)
 @app.route('/products', methods=['GET'])
-@require_role('USER', 'SELLER', 'ADMIN')
 def get_products():
     status = request.args.get('status', None)
     category = request.args.get('category', None)
@@ -442,7 +441,7 @@ def update_order_endpoint(order_id):
     db = next(db_gen)
     try:
         items_data = [item.model_dump() for item in validated_data.items]
-        order = order_service.update_order(db, order_uuid, g.user_id, items_data)
+        order = order_service.update_order(db, order_uuid, g.user_id, items_data, validated_data.promo_code)
         return jsonify(OrderResponse.model_validate(order).model_dump(mode='json'))
     finally:
         db.close()

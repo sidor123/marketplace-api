@@ -189,7 +189,7 @@ def get_order(db: Session, order_id: uuid.UUID) -> Optional[Order]:
     return db.query(Order).filter(Order.id == order_id).first()
 
 
-def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_data: List[dict]) -> Order:
+def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_data: List[dict], promo_code_str: Optional[str] = None) -> Order:
     order = get_order(db, order_id)
     if not order:
         raise OrderNotFoundException(str(order_id))
@@ -206,10 +206,17 @@ def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_dat
 
     check_rate_limit(db, user_id, OperationType.UPDATE_ORDER)
 
+    # Return stock from old items
     for item in order.items:
         product = db.query(Product).filter(Product.id == item.product_id).first()
         if product:
             product.stock += item.quantity
+
+    # Decrement old promo code usage if it exists
+    if order.promo_code_id:  # type: ignore
+        old_promo = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).first()
+        if old_promo:
+            old_promo.current_uses -= 1  # type: ignore
 
     db.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
     db.flush()
@@ -223,18 +230,30 @@ def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_dat
         for product, item in zip(products, items_data)
     )
 
+    # Apply new promo code if provided, otherwise keep the old one
     promo_code = None
     discount = Decimal(0)
-
-    if order.promo_code_id:  # type: ignore
+    
+    # Use new promo code if provided, otherwise try to reuse the old one
+    if promo_code_str is not None:
+        # New promo code provided (could be empty string to remove promo code)
+        if promo_code_str:
+            promo_code, discount = validate_and_apply_promo_code(db, promo_code_str, total_amount)  # type: ignore
+            order.promo_code_id = promo_code.id if promo_code else None  # type: ignore
+        else:
+            # Empty string means remove promo code
+            order.promo_code_id = None  # type: ignore
+    elif order.promo_code_id:  # type: ignore
+        # No new promo code provided, try to reuse the old one
         promo_code = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).first()
         if promo_code:
-            if total_amount >= promo_code.min_order_amount:  # type: ignore
-                discount = calculate_discount(promo_code, total_amount)  # type: ignore
-            else:
-                promo_code.current_uses -= 1  # type: ignore
+            # Re-validate and apply the old promo code
+            try:
+                promo_code, discount = validate_and_apply_promo_code(db, promo_code.code, total_amount)  # type: ignore
+                order.promo_code_id = promo_code.id if promo_code else None  # type: ignore
+            except Exception:
+                # If old promo code is no longer valid, remove it
                 order.promo_code_id = None  # type: ignore
-                promo_code = None
 
     order.total_amount = total_amount - discount  # type: ignore
     order.discount_amount = discount  # type: ignore

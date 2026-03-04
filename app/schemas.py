@@ -91,6 +91,7 @@ class OrderCreate(BaseModel):
 
 class OrderUpdate(BaseModel):
     items: list[OrderItemCreate] = Field(..., min_length=1, max_length=50)
+    promo_code: Optional[str] = Field(None, pattern=r'^[A-Z0-9_]{4,20}$')
 
 
 class OrderItemResponse(BaseModel):

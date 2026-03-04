@@ -366,6 +366,7 @@ curl "http://localhost:8000/products/{product_id}"
 ```bash
 curl -X PUT "http://localhost:8000/products/{product_id}" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -d '{
     "price": 79990.00,
     "stock": 5
@@ -375,7 +376,9 @@ curl -X PUT "http://localhost:8000/products/{product_id}" \
 #### Удаление товара (мягкое)
 
 ```bash
-curl -X DELETE "http://localhost:8000/products/{product_id}"
+curl -X DELETE "http://localhost:8000/products/{product_id}" \
+ .-H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 ## Схема данных Product

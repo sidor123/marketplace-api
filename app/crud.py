@@ -11,6 +11,8 @@ def create_product(db: Session, data: dict) -> Product:
     status_value = data['status']
     if isinstance(status_value, str):
         status_enum = ProductStatus[status_value]
+    elif hasattr(status_value, 'value'):
+        status_enum = ProductStatus[status_value.value]
     else:
         status_enum = status_value
     
@@ -20,7 +22,8 @@ def create_product(db: Session, data: dict) -> Product:
         price=Decimal(str(data['price'])),
         stock=int(data['stock']),
         category=data['category'],
-        status=status_enum
+        status=status_enum,
+        seller_id=data.get('seller_id')
     )
     db.add(db_product)
     db.commit()
@@ -74,6 +77,8 @@ def update_product(
         status_value = data['status']
         if isinstance(status_value, str):
             db_product.status = ProductStatus[status_value] # type: ignore
+        elif hasattr(status_value, 'value'):
+            db_product.status = ProductStatus[status_value.value] # type: ignore
         else:
             db_product.status = status_value # type: ignore
 
