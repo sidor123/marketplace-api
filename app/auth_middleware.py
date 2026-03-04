@@ -83,7 +83,6 @@ def optional_auth(f):
             finally:
                 db.close()
         except:
-            # No token or invalid token - continue without auth
             g.user = None
             g.user_id = None
             g.user_role = None

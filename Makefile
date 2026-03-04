@@ -1,7 +1,13 @@
-.PHONY: install run migrate docker-up docker-down docker-build docker-logs docker-restart flyway-install
+.PHONY: install run migrate docker-up docker-down docker-build docker-logs docker-restart flyway-install generate-schemas
 
 install:
 	pip install -r requirements.txt
+	@echo "Generating schemas from OpenAPI spec..."
+	@./scripts/generate_schemas.sh
+
+generate-schemas:
+	@echo "Generating Pydantic schemas from OpenAPI spec..."
+	@./scripts/generate_schemas.sh
 
 flyway-install:
 	@echo "Installing Flyway"

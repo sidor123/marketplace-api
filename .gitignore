@@ -41,4 +41,4 @@ generated/
 *.sqlite3
 
 # Logs
-*.log
+*.logapp/generated_schemas.py

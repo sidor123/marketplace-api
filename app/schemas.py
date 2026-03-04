@@ -1,148 +1,26 @@
-from pydantic import BaseModel, Field, ConfigDict, field_validator, EmailStr, model_validator
-from typing import Optional, Any
-from datetime import datetime
+from typing import Any, Optional
 from decimal import Decimal
+from datetime import datetime
 from enum import Enum
 import uuid
 
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, EmailStr
 
-class ProductStatus(str, Enum):
-    ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
-    ARCHIVED = "ARCHIVED"
-
-
-class ProductCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = Field(None, max_length=4000)
-    price: Decimal = Field(..., gt=0)
-    stock: int = Field(..., ge=0)
-    category: str = Field(..., min_length=1, max_length=100)
-    status: ProductStatus
-    
-    @field_validator('price')
-    @classmethod
-    def validate_price(cls, v):
-        if v <= 0:
-            raise ValueError('price must be greater than 0')
-        return v
-
-
-class ProductUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = Field(None, max_length=4000)
-    price: Optional[Decimal] = Field(None, gt=0)
-    stock: Optional[int] = Field(None, ge=0)
-    category: Optional[str] = Field(None, min_length=1, max_length=100)
-    status: Optional[ProductStatus] = None
-    
-    @field_validator('price')
-    @classmethod
-    def validate_price(cls, v):
-        if v is not None and v <= 0:
-            raise ValueError('price must be greater than 0')
-        return v
-
-
-class ProductResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: uuid.UUID
-    name: str
-    description: Optional[str]
-    price: Decimal
-    stock: int
-    category: str
-    status: ProductStatus
-    created_at: datetime
-    updated_at: datetime
-
-
-class ProductListResponse(BaseModel):
-    items: list[ProductResponse]
-    total_elements: int
-    page: int
-    size: int
-
-
-class ErrorResponse(BaseModel):
-    error_code: str
-    message: str
-
-
-class OrderStatus(str, Enum):
-    CREATED = "CREATED"
-    PAYMENT_PENDING = "PAYMENT_PENDING"
-    PAID = "PAID"
-    SHIPPED = "SHIPPED"
-    COMPLETED = "COMPLETED"
-    CANCELED = "CANCELED"
-
-
-class OrderItemCreate(BaseModel):
-    product_id: uuid.UUID
-    quantity: int = Field(..., ge=1, le=999)
-
-
-class OrderCreate(BaseModel):
-    items: list[OrderItemCreate] = Field(..., min_length=1, max_length=50)
-    promo_code: Optional[str] = Field(None, pattern=r'^[A-Z0-9_]{4,20}$')
-
-
-class OrderUpdate(BaseModel):
-    items: list[OrderItemCreate] = Field(..., min_length=1, max_length=50)
-    promo_code: Optional[str] = Field(None, pattern=r'^[A-Z0-9_]{4,20}$')
-
-
-class OrderItemResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: uuid.UUID
-    product_id: uuid.UUID
-    quantity: int
-    price_at_order: Decimal
-
-
-class OrderResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: uuid.UUID
-    user_id: uuid.UUID
-    status: OrderStatus
-    promo_code: Optional[str] = None
-    total_amount: Decimal
-    discount_amount: Decimal
-    items: list[OrderItemResponse]
-    created_at: datetime
-    updated_at: datetime
-    details: Optional[dict] = None
-    
-    @model_validator(mode='before')
-    @classmethod
-    def extract_promo_code(cls, data: Any) -> Any:
-        # If data is a dict, return as is
-        if isinstance(data, dict):
-            return data
-        
-        # If data is an ORM object, extract promo_code
-        if hasattr(data, 'promo_code') and data.promo_code is not None:
-            # If it's a PromoCode object, extract the code string
-            if hasattr(data.promo_code, 'code'):
-                # Create a dict-like object with the code string
-                data_dict = {
-                    'id': data.id,
-                    'user_id': data.user_id,
-                    'status': data.status,
-                    'promo_code': data.promo_code.code,
-                    'total_amount': data.total_amount,
-                    'discount_amount': data.discount_amount,
-                    'items': data.items,
-                    'created_at': data.created_at,
-                    'updated_at': data.updated_at,
-                }
-                return data_dict
-        
-        return data
+from generated.schemas import (
+    TokenResponse,
+    ProductStatus,
+    ProductCreate as GeneratedProductCreate,
+    ProductUpdate as GeneratedProductUpdate,
+    ProductResponse as GeneratedProductResponse,
+    ProductListResponse,
+    OrderStatus,
+    OrderItemCreate,
+    OrderCreate as GeneratedOrderCreate,
+    OrderUpdate as GeneratedOrderUpdate,
+    OrderItemResponse as GeneratedOrderItemResponse,
+    OrderResponse as GeneratedOrderResponse,
+    ErrorResponse,
+)
 
 
 class UserRole(str, Enum):
@@ -162,12 +40,6 @@ class UserLogin(BaseModel):
     password: str
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
@@ -181,7 +53,6 @@ class UserResponse(BaseModel):
     created_at: datetime
 
 
-# Promo Code schemas
 class DiscountType(str, Enum):
     PERCENTAGE = "PERCENTAGE"
     FIXED_AMOUNT = "FIXED_AMOUNT"
@@ -218,3 +89,97 @@ class PromoCodeResponse(BaseModel):
     valid_from: datetime
     valid_until: datetime
     active: bool
+
+
+class ProductCreate(GeneratedProductCreate):
+    @field_validator('price')
+    @classmethod
+    def validate_price(cls, v):
+        if v <= 0:
+            raise ValueError('price must be greater than 0')
+        return v
+
+
+class ProductUpdate(GeneratedProductUpdate):
+    @field_validator('price')
+    @classmethod
+    def validate_price(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('price must be greater than 0')
+        return v
+
+
+class ProductResponse(GeneratedProductResponse):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderCreate(GeneratedOrderCreate):
+    pass
+
+
+class OrderUpdate(GeneratedOrderUpdate):
+    promo_code: Optional[str] = Field(
+        default=None, description='Promo code (optional)', pattern=r'^[A-Z0-9_]{4,20}$'
+    )
+
+
+class OrderItemResponse(GeneratedOrderItemResponse):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderResponse(GeneratedOrderResponse):
+    model_config = ConfigDict(from_attributes=True)
+    
+    details: Optional[dict] = None
+    
+    @model_validator(mode='before')
+    @classmethod
+    def extract_promo_code(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return data
+        
+        if hasattr(data, 'promo_code') and data.promo_code is not None:
+            if hasattr(data.promo_code, 'code'):
+                data_dict = {
+                    'id': data.id,
+                    'user_id': data.user_id,
+                    'status': data.status,
+                    'promo_code': data.promo_code.code,
+                    'total_amount': data.total_amount,
+                    'discount_amount': data.discount_amount,
+                    'items': data.items,
+                    'created_at': data.created_at,
+                    'updated_at': data.updated_at,
+                }
+                return data_dict
+        
+        return data
+
+
+__all__ = [
+    'TokenResponse',
+    'UserRole',
+    'UserRegister',
+    'UserLogin',
+    'RefreshTokenRequest',
+    'UserResponse',
+    
+    'ProductStatus',
+    'ProductCreate',
+    'ProductUpdate',
+    'ProductResponse',
+    'ProductListResponse',
+    
+    'OrderStatus',
+    'OrderItemCreate',
+    'OrderCreate',
+    'OrderUpdate',
+    'OrderItemResponse',
+    'OrderResponse',
+    
+    'DiscountType',
+    'PromoCodeCreate',
+    'PromoCodeResponse',
+    
+    'ErrorResponse',
+]
