@@ -41,4 +41,10 @@ generated/
 *.sqlite3
 
 # Logs
-*.logapp/generated_schemas.py
+*.log
+
+.venv/
+.env.*
+!.env.example
+artifacts/
+node_modules/

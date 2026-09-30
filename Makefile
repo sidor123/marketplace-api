@@ -1,78 +1,40 @@
-.PHONY: install run migrate docker-up docker-down docker-build docker-logs docker-restart flyway-install generate-schemas
+.PHONY: install generate-schemas run build release start stop logs test archive
+PYTHON ?= python3
+COMPOSE ?= docker compose
+ENV_FILE ?= .env
+RELEASE_ID ?= hw1-r1
+APP_IMAGE ?= marketplace-api:hw1-r1
+RELEASE_ENV = artifacts/releases/$(RELEASE_ID).env
 
 install:
-	pip install -r requirements.txt
-	@echo "Generating schemas from OpenAPI spec..."
-	@./scripts/generate_schemas.sh
+	$(PYTHON) -m pip install -r requirements-build.txt
+	sh scripts/generate_schemas.sh
 
 generate-schemas:
-	@echo "Generating Pydantic schemas from OpenAPI spec..."
-	@./scripts/generate_schemas.sh
-
-flyway-install:
-	@echo "Installing Flyway"
-	@if command -v brew >/dev/null 2>&1; then \
-		brew install flyway; \
-	else \
-		echo "Homebrew not found"; \
-	fi
-
-migrate:
-	@echo "Running Flyway migrations (local)"
-	flyway -configFiles=flyway.conf migrate
-
-migrate-info:
-	flyway -configFiles=flyway.conf info
+	sh scripts/generate_schemas.sh
 
 run:
-	python3 -m flask --app app.main run --host 0.0.0.0 --port 8000 --reload
+	gunicorn --config gunicorn.conf.py app.main:app
 
-docker-build:
-	@echo "Building Docker images"
-	docker-compose build
+build:
+	$(COMPOSE) --env-file $(ENV_FILE) build api
 
-docker-up:
-	@echo "Starting all services (postgres, flyway, api)"
-	docker-compose up -d
+release:
+	$(PYTHON) scripts/release.py $(RELEASE_ID) --env-file $(ENV_FILE) --image $(APP_IMAGE)
+	$(COMPOSE) --env-file $(RELEASE_ENV) up -d --wait postgres
+	$(COMPOSE) --env-file $(RELEASE_ENV) run --rm migrate
 
-docker-down:
-	@echo "Stopping all services"
-	docker-compose down
+start:
+	$(COMPOSE) --env-file $(RELEASE_ENV) up -d --no-build --wait api
 
-docker-logs:
-	docker-compose logs -f
+stop:
+	$(COMPOSE) --env-file $(RELEASE_ENV) down
 
-docker-logs-api:
-	docker-compose logs -f api
+logs:
+	$(COMPOSE) --env-file $(RELEASE_ENV) logs -f api
 
-docker-logs-postgres:
-	docker-compose logs -f postgres
+test:
+	$(PYTHON) -m unittest discover -s tests -v
 
-docker-logs-flyway:
-	docker-compose logs flyway
-
-docker-restart:
-	@echo "Restarting all services"
-	docker-compose restart
-
-docker-restart-api:
-	@echo "Restarting API service"
-	docker-compose restart api
-
-docker-clean:
-	@echo "Stopping and removing all containers, networks, and volumes"
-	docker-compose down -v
-
-setup: install docker-up
-	@echo "Docker setup complete! Services are running:"
-	@echo "  - PostgreSQL: localhost:5433"
-	@echo "  - API: http://localhost:8000"
-	@echo "  - Migrations: completed automatically"
-	@echo ""
-	@echo "Use 'make docker-logs' to view logs"
-
-setup-local: install docker-up
-	@echo "Waiting for database to be ready"
-	@sleep 3
-	@$(MAKE) migrate
-	@echo "Local setup complete, run 'make run' to start application"
+archive:
+	$(PYTHON) scripts/package.py

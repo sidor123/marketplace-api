@@ -1,4 +1,8 @@
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, render_template
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from werkzeug.exceptions import HTTPException
+import os
 from pydantic import ValidationError
 import uuid
 
@@ -22,6 +26,7 @@ from app.auth_middleware import require_role
 from app.logging_middleware import init_logging_middleware
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024
 
 init_logging_middleware(app)
 
@@ -77,9 +82,40 @@ def format_validation_errors(validation_error: ValidationError):
 
 @app.route('/')
 def root():
-    return jsonify({
-        "message": "Marketplace API",
-    })
+    return render_template('index.html')
+
+
+@app.route('/health/live')
+def live():
+    return jsonify(status='ok', release=os.environ.get('RELEASE_ID', 'local'))
+
+
+@app.route('/health/ready')
+def ready():
+    try:
+        from app.database import engine
+        with engine.connect() as connection:
+            connection.execute(text('SELECT id FROM products LIMIT 1'))
+        return jsonify(status='ready')
+    except SQLAlchemyError:
+        return jsonify(status='unavailable'), 503
+
+
+@app.before_request
+def validate_json_object():
+    if request.method in ('POST', 'PUT') and request.is_json:
+        if not isinstance(request.get_json(), dict):
+            raise ValidationException(message='JSON body must be an object')
+
+
+@app.errorhandler(HTTPException)
+def http_error(error):
+    return jsonify(error_code=error.name.upper().replace(' ', '_'), message=error.description), error.code
+
+
+@app.errorhandler(IntegrityError)
+def integrity_error(error):
+    return jsonify(error_code='CONFLICT', message='Data conflicts with database constraints'), 409
 
 # ============= AUTH ENDPOINTS =============
 
@@ -96,6 +132,9 @@ def register():
             details={"fields": format_validation_errors(e)}
         )
     
+    if validated_data.role and validated_data.role.value == 'ADMIN':
+        raise auth_service.AccessDeniedException()
+
     db_gen = get_db()
     db = next(db_gen)
     try:
@@ -255,12 +294,13 @@ def get_product(product_id):
 def get_products():
     status = request.args.get('status', None)
     category = request.args.get('category', None)
-    page = int(request.args.get('page', 0))
-    page = max(page, 0)
-
-    size = int(request.args.get('size', 20))
-    if size < 1 or size > 100:
-        size = 20
+    try:
+        page = int(request.args.get('page', 0))
+        size = int(request.args.get('size', 20))
+        if page < 0 or not 1 <= size <= 100:
+            raise ValueError
+    except ValueError:
+        raise ValidationException(message='page must be >= 0; size must be between 1 and 100')
 
     if status and status not in ['ACTIVE', 'INACTIVE', 'ARCHIVED']:
         raise ValidationException(
@@ -494,4 +534,4 @@ def create_promo_code():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', '8000')))

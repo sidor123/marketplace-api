@@ -1,55 +1,13 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Environment
+.git
 .env
-.env.local
-
-# Database
-*.db
-*.sqlite3
-
-# Logs
+.env.*
+venv
+.venv
+__pycache__
+**/__pycache__
+*.pyc
 *.log
-
-# Git
-.git/
-.gitignore
-
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# Documentation
-*.md
-!README.md
-
-# Tests
-test_*.py
-*_test.py
-
-# Flyway local config
-flyway.conf
-
-# Generated code
-generated/
-
-# Database migrations (copied separately in docker-compose)
-db/
+*.zip
+artifacts
+generated
+node_modules

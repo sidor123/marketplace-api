@@ -35,7 +35,7 @@ paths:
                   maxLength: 100
                 role:
                   type: string
-                  enum: [USER, SELLER, ADMIN]
+                  enum: [USER, SELLER]
                   default: USER
       responses:
         '201':
@@ -614,6 +614,11 @@ components:
         - created_at
         - updated_at
       properties:
+        seller_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Owner of the product
         id:
           type: string
           format: uuid

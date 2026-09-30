@@ -1,62 +1,51 @@
+x-app: &app
+  image: ${APP_IMAGE:-marketplace-api:local}
+  env_file: ${APP_ENV_FILE:-.env}
+  init: true
+
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: marketplace-db
+    image: postgres:16.12-alpine
     environment:
-      POSTGRES_USER: marketplace
-      POSTGRES_PASSWORD: marketplace123
-      POSTGRES_DB: marketplace
-    ports:
-      - "5433:5432"
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U marketplace"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - marketplace-network
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
-  flyway:
-    image: flyway/flyway:10-alpine
-    container_name: marketplace-flyway
-    platform: linux/amd64
-    command: -configFiles=/flyway/conf/flyway.conf -locations=filesystem:/flyway/sql migrate
-    volumes:
-      - ./db/migration:/flyway/sql
-      - ./flyway.docker.conf:/flyway/conf/flyway.conf
+  migrate:
+    <<: *app
+    command: ["python", "-m", "app.migrate"]
+    profiles: ["tools"]
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - marketplace-network
+    restart: "no"
 
   api:
+    <<: *app
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: marketplace-api
-    environment:
-      DATABASE_URL: postgresql://marketplace:marketplace123@postgres:5432/marketplace
-      FLASK_ENV: development
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
     ports:
-      - "8000:8000"
-    volumes:
-      - ./app:/app/app
-      - ./openapi:/app/openapi
+      - "${HOST_PORT:-8000}:${PORT:-8000}"
     depends_on:
       postgres:
         condition: service_healthy
-      flyway:
-        condition: service_completed_successfully
-    networks:
-      - marketplace-network
     restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PORT', '8000') + '/health/ready', timeout=6)"]
+      interval: 10s
+      timeout: 7s
+      retries: 3
+      start_period: 5s
 
 volumes:
   postgres_data:
-
-networks:
-  marketplace-network:
-    driver: bridge

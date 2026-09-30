@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Integer, Numeric, DateTime, Enum as SQLEnum, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 
@@ -45,9 +45,9 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.USER, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    role = Column(SQLEnum(UserRole, name="user_role"), nullable=False, default=UserRole.USER, index=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class Product(Base):
@@ -59,10 +59,10 @@ class Product(Base):
     price = Column(Numeric(12, 2), nullable=False)
     stock = Column(Integer, nullable=False)
     category = Column(String(100), nullable=False)
-    status = Column(SQLEnum(ProductStatus), nullable=False, default=ProductStatus.ACTIVE, index=True)
+    status = Column(SQLEnum(ProductStatus, name="product_status"), nullable=False, default=ProductStatus.ACTIVE, index=True)
     seller_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     seller = relationship("User")
 
@@ -72,7 +72,7 @@ class PromoCode(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     code = Column(String(20), nullable=False, unique=True, index=True)
-    discount_type = Column(SQLEnum(DiscountType), nullable=False)
+    discount_type = Column(SQLEnum(DiscountType, name="discount_type"), nullable=False)
     discount_value = Column(Numeric(12, 2), nullable=False)
     min_order_amount = Column(Numeric(12, 2), nullable=False, default=0)
     max_uses = Column(Integer, nullable=False)
@@ -87,12 +87,12 @@ class Order(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.CREATED, index=True)
+    status = Column(SQLEnum(OrderStatus, name="order_status"), nullable=False, default=OrderStatus.CREATED, index=True)
     promo_code_id = Column(UUID(as_uuid=True), ForeignKey('promo_codes.id'), nullable=True)
     total_amount = Column(Numeric(12, 2), nullable=False)
     discount_amount = Column(Numeric(12, 2), nullable=False, default=0)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     promo_code = relationship("PromoCode")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
@@ -116,5 +116,5 @@ class UserOperation(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    operation_type = Column(SQLEnum(OperationType), nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    operation_type = Column(SQLEnum(OperationType, name="operation_type"), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

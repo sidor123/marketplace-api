@@ -1,10 +1,12 @@
-#!/bin/bash
+#!/bin/sh
 
 set -e
 
 mkdir -p generated
+touch generated/__init__.py
 
 datamodel-codegen \
+  --disable-timestamp \
   --input openapi/products.yaml \
   --input-file-type openapi \
   --output generated/schemas.py \

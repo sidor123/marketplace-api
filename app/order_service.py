@@ -7,7 +7,7 @@ import os
 
 from app.models import (
     Order, OrderItem, Product, ProductStatus, OrderStatus,
-    PromoCode, DiscountType, UserOperation, OperationType
+    PromoCode, DiscountType, UserOperation, OperationType, User
 )
 from app.exceptions import (
     ProductNotFoundException, ProductInactiveException,
@@ -21,6 +21,14 @@ from app.exceptions import (
 RATE_LIMIT_MINUTES = int(os.getenv('ORDER_RATE_LIMIT_MINUTES', '5'))
 
 
+def lock_user(db: Session, user_id: uuid.UUID):
+    db.query(User).filter(User.id == user_id).with_for_update().one()
+
+
+def lock_products(db: Session, product_ids):
+    db.query(Product).filter(Product.id.in_(set(product_ids))).order_by(Product.id).with_for_update().all()
+
+
 def check_rate_limit(db: Session, user_id: uuid.UUID, operation_type: OperationType):
     last_operation = db.query(UserOperation).filter(
         UserOperation.user_id == user_id,
@@ -28,7 +36,7 @@ def check_rate_limit(db: Session, user_id: uuid.UUID, operation_type: OperationT
     ).order_by(UserOperation.created_at.desc()).first()
 
     if last_operation:
-        time_diff = datetime.now() - last_operation.created_at
+        time_diff = datetime.now(timezone.utc).replace(tzinfo=None) - last_operation.created_at
         if bool(time_diff < timedelta(minutes=RATE_LIMIT_MINUTES)):
             raise OrderLimitExceededException(
                 details={
@@ -100,7 +108,7 @@ def validate_and_apply_promo_code(
     if not promo_code_str:
         return None, Decimal(0)
 
-    promo_code = db.query(PromoCode).filter(PromoCode.code == promo_code_str).first()
+    promo_code = db.query(PromoCode).filter(PromoCode.code == promo_code_str).with_for_update().first()
 
     if not promo_code:
         raise PromoCodeInvalidException(promo_code_str, "not found")
@@ -141,6 +149,8 @@ def validate_and_apply_promo_code(
 
 
 def create_order(db: Session, user_id: uuid.UUID, items_data: List[dict], promo_code_str: Optional[str]) -> Order:
+    lock_user(db, user_id)
+    lock_products(db, [item["product_id"] for item in items_data])
     check_rate_limit(db, user_id, OperationType.CREATE_ORDER)
     check_active_orders(db, user_id)
 
@@ -190,6 +200,7 @@ def get_order(db: Session, order_id: uuid.UUID) -> Optional[Order]:
 
 
 def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_data: List[dict], promo_code_str: Optional[str] = None) -> Order:
+    lock_user(db, user_id)
     order = get_order(db, order_id)
     if not order:
         raise OrderNotFoundException(str(order_id))
@@ -206,13 +217,14 @@ def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_dat
 
     check_rate_limit(db, user_id, OperationType.UPDATE_ORDER)
 
+    lock_products(db, [item.product_id for item in order.items] + [item["product_id"] for item in items_data])
     for item in order.items:
         product = db.query(Product).filter(Product.id == item.product_id).first()
         if product:
             product.stock += item.quantity
 
     if order.promo_code_id:  # type: ignore
-        old_promo = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).first()
+        old_promo = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).with_for_update().first()
         if old_promo:
             old_promo.current_uses -= 1  # type: ignore
 
@@ -238,7 +250,7 @@ def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_dat
         else:
             order.promo_code_id = None  # type: ignore
     elif order.promo_code_id:  # type: ignore
-        promo_code = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).first()
+        promo_code = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).with_for_update().first()
         if promo_code:
             try:
                 promo_code, discount = validate_and_apply_promo_code(db, promo_code.code, total_amount)  # type: ignore
@@ -270,6 +282,7 @@ def update_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID, items_dat
 
 
 def cancel_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID) -> Order:
+    lock_user(db, user_id)
     order = get_order(db, order_id)
     if not order:
         raise OrderNotFoundException(str(order_id))
@@ -284,13 +297,14 @@ def cancel_order(db: Session, order_id: uuid.UUID, user_id: uuid.UUID) -> Order:
             details={"message": "Order can only be canceled from CREATED or PAYMENT_PENDING state"}
         )
 
+    lock_products(db, [item.product_id for item in order.items])
     for item in order.items:
         product = db.query(Product).filter(Product.id == item.product_id).first()
         if product:
             product.stock += item.quantity
 
     if order.promo_code_id:  # type: ignore
-        promo_code = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).first()
+        promo_code = db.query(PromoCode).filter(PromoCode.id == order.promo_code_id).with_for_update().first()
         if promo_code:
             promo_code.current_uses -= 1  # type: ignore
 

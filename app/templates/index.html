@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Маркет · Каталог товаров</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body>
+  <header><a class="brand" href="/">м<span>·</span> Маркет</a><span class="header-note">Управление каталогом</span><button id="account-button" class="secondary">Войти</button></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">ВАШ МАЛЕНЬКИЙ МАРКЕТПЛЕЙС</p><h1>Всё начинается<br>с хорошего товара.</h1><p class="muted">Каталог, цены и остатки — в одном месте.</p></div><button id="create-button" hidden>+ Добавить товар</button></section>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <section class="catalog" aria-labelledby="catalog-title">
+      <div class="catalog-heading"><h2 id="catalog-title">Каталог <span id="total">0</span></h2><span id="account-label" class="muted">Просмотр доступен без входа</span></div>
+      <form id="filters" class="filters">
+        <label>Категория<input name="category" placeholder="Все категории" maxlength="100"></label>
+        <label>Статус<select name="status"><option value="ACTIVE">В продаже</option><option value="INACTIVE">Неактивные</option><option value="ARCHIVED">Архив</option><option value="">Все статусы</option></select></label>
+        <button type="submit" class="secondary">Показать</button>
+      </form>
+      <div id="products" class="products" aria-live="polite"></div>
+      <div class="pagination"><button id="prev" class="secondary">← Назад</button><span id="page-label"></span><button id="next" class="secondary">Далее →</button></div>
+    </section>
+    <footer>Маркет · Учебное приложение <span>Данные сохраняются в PostgreSQL</span></footer>
+  </main>
+  <dialog id="auth-dialog">
+    <form id="auth-form">
+      <div class="dialog-heading"><h2 id="auth-title">Вход в Маркет</h2><button type="button" class="icon close" aria-label="Закрыть">×</button></div>
+      <p class="muted">Войдите, чтобы управлять своими товарами.</p>
+      <label>Email<input name="email" type="email" autocomplete="email" required maxlength="255"></label>
+      <label>Пароль<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="72"></label>
+      <label id="role-field" hidden>Тип аккаунта<select name="role"><option value="SELLER">Продавец — управление товарами</option><option value="USER">Покупатель — просмотр каталога</option></select></label>
+      <p class="form-error" role="alert"></p>
+      <button type="submit" id="auth-submit">Войти</button>
+      <button type="button" id="auth-toggle" class="text-button">Нет аккаунта? Зарегистрироваться</button>
+    </form>
+  </dialog>
+  <dialog id="product-dialog">
+    <form id="product-form">
+      <div class="dialog-heading"><h2 id="product-title">Новый товар</h2><button type="button" class="icon close" aria-label="Закрыть">×</button></div>
+      <label>Название<input name="name" required maxlength="255" placeholder="Например, настольная лампа"></label>
+      <label>Описание<textarea name="description" rows="3" maxlength="4000" placeholder="Что стоит знать об этом товаре?"></textarea></label>
+      <div class="form-row"><label>Цена, ₽<input name="price" type="number" min="0.01" max="9999999999.99" step="0.01" required></label><label>Остаток, шт.<input name="stock" type="number" min="0" max="2147483647" step="1" required></label></div>
+      <label>Категория<input name="category" maxlength="100" required placeholder="Например, Дом"></label>
+      <label>Статус<select name="status"><option value="ACTIVE">В продаже</option><option value="INACTIVE">Неактивен</option><option value="ARCHIVED">В архиве</option></select></label>
+      <p class="form-error" role="alert"></p><button type="submit">Сохранить товар</button>
+    </form>
+  </dialog>
+  <dialog id="detail-dialog"><div class="dialog-heading"><h2 id="detail-title"></h2><button class="icon close" aria-label="Закрыть">×</button></div><div id="detail-body"></div></dialog>
+  <dialog id="delete-dialog"><form id="delete-form"><h2>Архивировать товар?</h2><p>Он исчезнет из продажи. Данные сохранятся в архиве, откуда товар можно восстановить.</p><p class="form-error" role="alert"></p><div class="actions"><button type="button" class="secondary close">Отмена</button><button type="submit" class="danger">Архивировать</button></div></form></dialog>
+</body>
+</html>

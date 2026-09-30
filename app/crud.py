@@ -50,7 +50,7 @@ def get_products(
         query = query.filter(Product.category == category)
     
     total = query.count()
-    products = query.offset(page * size).limit(size).all()
+    products = query.order_by(Product.created_at.desc(), Product.id).offset(page * size).limit(size).all()
     return products, total
 
 

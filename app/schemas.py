@@ -1,6 +1,6 @@
-from typing import Any, Optional
+from typing import Optional
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 import uuid
 
@@ -34,6 +34,13 @@ class UserRegister(BaseModel):
     password: str = Field(..., min_length=8, max_length=100)
     role: Optional[UserRole] = UserRole.USER
 
+    @field_validator('password')
+    @classmethod
+    def password_byte_length(cls, value):
+        if len(value.encode('utf-8')) > 72:
+            raise ValueError('Password must be at most 72 UTF-8 bytes')
+        return value
+
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -46,7 +53,7 @@ class RefreshTokenRequest(BaseModel):
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: uuid.UUID
     email: str
     role: UserRole
@@ -67,7 +74,14 @@ class PromoCodeCreate(BaseModel):
     valid_from: datetime
     valid_until: datetime
     active: bool = Field(default=True)
-    
+
+    @field_validator('valid_from', 'valid_until')
+    @classmethod
+    def normalize_dates(cls, value):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
     @field_validator('valid_until')
     @classmethod
     def validate_dates(cls, v, info):
@@ -78,7 +92,7 @@ class PromoCodeCreate(BaseModel):
 
 class PromoCodeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: uuid.UUID
     code: str
     discount_type: DiscountType
@@ -101,6 +115,15 @@ class ProductCreate(GeneratedProductCreate):
 
 
 class ProductUpdate(GeneratedProductUpdate):
+    @model_validator(mode='before')
+    @classmethod
+    def reject_null_fields(cls, data):
+        if isinstance(data, dict):
+            for field in ('name', 'price', 'stock', 'category', 'status'):
+                if field in data and data[field] is None:
+                    raise ValueError(f'{field} cannot be null')
+        return data
+
     @field_validator('price')
     @classmethod
     def validate_price(cls, v):
@@ -109,15 +132,32 @@ class ProductUpdate(GeneratedProductUpdate):
         return v
 
 
-class ProductResponse(GeneratedProductResponse):
+class TimestampResponse(BaseModel):
+    @field_validator('created_at', 'updated_at', mode='before', check_fields=False)
+    @classmethod
+    def ensure_timezone_aware(cls, value):
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
+class ProductResponse(GeneratedProductResponse, TimestampResponse):
+    seller_id: Optional[uuid.UUID] = None
     model_config = ConfigDict(from_attributes=True)
 
 
 class OrderCreate(GeneratedOrderCreate):
-    pass
+    @field_validator('items')
+    @classmethod
+    def unique_products(cls, items):
+        if len({item.product_id for item in items}) != len(items):
+            raise ValueError('Each product must appear only once')
+        return items
 
 
 class OrderUpdate(GeneratedOrderUpdate):
+    _unique_products = field_validator('items')(OrderCreate.unique_products.__func__)
+
     promo_code: Optional[str] = Field(
         default=None, description='Promo code (optional)', pattern=r'^[A-Z0-9_]{4,20}$'
     )
@@ -127,33 +167,16 @@ class OrderItemResponse(GeneratedOrderItemResponse):
     model_config = ConfigDict(from_attributes=True)
 
 
-class OrderResponse(GeneratedOrderResponse):
+class OrderResponse(GeneratedOrderResponse, TimestampResponse):
+    items: list[OrderItemResponse]
     model_config = ConfigDict(from_attributes=True)
-    
+
     details: Optional[dict] = None
-    
-    @model_validator(mode='before')
+
+    @field_validator('promo_code', mode='before')
     @classmethod
-    def extract_promo_code(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            return data
-        
-        if hasattr(data, 'promo_code') and data.promo_code is not None:
-            if hasattr(data.promo_code, 'code'):
-                data_dict = {
-                    'id': data.id,
-                    'user_id': data.user_id,
-                    'status': data.status,
-                    'promo_code': data.promo_code.code,
-                    'total_amount': data.total_amount,
-                    'discount_amount': data.discount_amount,
-                    'items': data.items,
-                    'created_at': data.created_at,
-                    'updated_at': data.updated_at,
-                }
-                return data_dict
-        
-        return data
+    def extract_promo_code(cls, value):
+        return getattr(value, 'code', value)
 
 
 __all__ = [
@@ -163,23 +186,23 @@ __all__ = [
     'UserLogin',
     'RefreshTokenRequest',
     'UserResponse',
-    
+
     'ProductStatus',
     'ProductCreate',
     'ProductUpdate',
     'ProductResponse',
     'ProductListResponse',
-    
+
     'OrderStatus',
     'OrderItemCreate',
     'OrderCreate',
     'OrderUpdate',
     'OrderItemResponse',
     'OrderResponse',
-    
+
     'DiscountType',
     'PromoCodeCreate',
     'PromoCodeResponse',
-    
+
     'ErrorResponse',
 ]

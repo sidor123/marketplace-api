@@ -1,14 +1,16 @@
 import json
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import request, g
 from functools import wraps
 import logging
 import sys
+import os
 
 logger = logging.getLogger('api_logger')
-logger.setLevel(logging.INFO)
+logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO').upper())
+logger.propagate = False
 
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.INFO)
@@ -49,16 +51,8 @@ def log_response(response):
         "status_code": response.status_code,
         "duration_ms": duration_ms,
         "user_id": str(user_id) if user_id else None,
-        "timestamp": datetime.utcnow().isoformat() + 'Z'
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
-    
-    if request.method in ['POST', 'PUT', 'DELETE']:
-        if request.is_json:
-            try:
-                request_body = request.get_json()
-                log_entry["request_body"] = mask_sensitive_data(request_body)
-            except Exception:
-                pass
     
     logger.info(json.dumps(log_entry))
     

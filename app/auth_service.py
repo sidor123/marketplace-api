@@ -3,16 +3,18 @@ import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 import uuid
-import os
 from sqlalchemy.orm import Session
 
 from app.models import User, UserRole
 from app.exceptions import APIException
+from app.config import required, positive_int
 
 
-SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv('REFRESH_TOKEN_EXPIRE_DAYS', '7'))
+SECRET_KEY = required('JWT_SECRET_KEY')
+if len(SECRET_KEY) < 32:
+    raise RuntimeError('JWT_SECRET_KEY must contain at least 32 characters')
+ACCESS_TOKEN_EXPIRE_MINUTES = positive_int('ACCESS_TOKEN_EXPIRE_MINUTES', '30')
+REFRESH_TOKEN_EXPIRE_DAYS = positive_int('REFRESH_TOKEN_EXPIRE_DAYS', '7')
 ENCRYPTION_ALGORITHM = 'HS256'
 
 
@@ -59,7 +61,10 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    encoded_password = password.encode('utf-8')
+    if len(encoded_password) > 72:
+        return False
+    return bcrypt.checkpw(encoded_password, password_hash.encode('utf-8'))
 
 
 def create_access_token(user_id: uuid.UUID, role: str) -> str:
